@@ -3,7 +3,7 @@ Ejemplo de uso del minimizador de AFD/AFND
 
 Este archivo muestra cómo usar las diferentes clases del sistema
 """
-from src.minimizador_principal import MinimizadorPrincipal
+from src.automata import Automata
 from src.afd import AFD
 from src.afnd import AFND
 
@@ -12,7 +12,7 @@ def ejemplo_uso_basico():
     """Ejemplo básico de uso del sistema"""
     
     # Crear instancia del minimizador principal
-    minimizador = MinimizadorPrincipal()
+    minimizador = Automata()
     
     print("=== Ejemplo de Minimización de AFD ===")
     
@@ -79,7 +79,7 @@ def ejemplo_operaciones_individuales():
     
     print("\n=== Ejemplo de Operaciones Individuales ===")
     
-    minimizador = MinimizadorPrincipal()
+    minimizador = Automata()
     
     # Crear AFD de ejemplo con estados redundantes
     estados = {'q0', 'q1', 'q2', 'q3', 'q4'}

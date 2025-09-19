@@ -9,7 +9,7 @@ from .conversor import ConversorAFND
 from .manejador_archivos import ManejadorArchivos
 
 
-class MinimizadorPrincipal:
+class Automata:
     """
     Clase principal que coordina todas las operaciones del sistema
     """
@@ -19,7 +19,7 @@ class MinimizadorPrincipal:
         self.automata_actual = None
         self.historial_operaciones = []
     
-    def cargar_automata_desde_archivo(self, ruta_archivo: str) -> Union[AFD, AFND]:
+    def cargar(self, ruta_archivo: str) -> Union[AFD, AFND]:
         """
         Carga un autómata desde un archivo JSON
         
@@ -34,7 +34,7 @@ class MinimizadorPrincipal:
         self._agregar_operacion("cargar", f"Cargado desde {ruta_archivo}")
         return automata
     
-    def guardar_automata_en_archivo(self, automata: Union[AFD, AFND], 
+    def guardar(self, automata: Union[AFD, AFND], 
                                    ruta_archivo: str, 
                                    incluir_metadatos: bool = True) -> None:
         """
@@ -48,7 +48,7 @@ class MinimizadorPrincipal:
         ManejadorArchivos.escribir_automata(automata, ruta_archivo, incluir_metadatos)
         self._agregar_operacion("guardar", f"Guardado en {ruta_archivo}")
     
-    def convertir_afnd_a_afd(self, afnd: AFND) -> AFD:
+    def to_afd(self, afnd: AFND) -> AFD:
         """
         Convierte un AFND a AFD
         
@@ -63,7 +63,7 @@ class MinimizadorPrincipal:
         self._agregar_operacion("conversion", "AFND convertido a AFD")
         return afd
     
-    def minimizar_afd(self, afd: AFD) -> AFD:
+    def minimizar(self, afd: AFD) -> AFD:
         """
         Minimiza un AFD
         
