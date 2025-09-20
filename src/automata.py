@@ -142,8 +142,7 @@ class Automata:
         Returns:
             Diccionario con información de validación
         """
-        from .afd import AFD
-        from .afnd import AFND
+        
         
         validacion = {
             "es_valido": True,
