@@ -142,6 +142,9 @@ class Automata:
         Returns:
             Diccionario con información de validación
         """
+        from .afd import AFD
+        from .afnd import AFND
+        
         validacion = {
             "es_valido": True,
             "errores": [],
@@ -149,15 +152,157 @@ class Automata:
             "propiedades": {}
         }
         
-        # TODO: Implementar validaciones específicas
-        # - Estados válidos
-        # - Transiciones válidas
-        # - Estado inicial válido
-        # - Estados finales válidos
-        # - Completitud (para AFD)
-        # - Determinismo (para verificar si AFND es realmente determinístico)
+        # Determinar tipo de autómata
+        es_afd = isinstance(automata, AFD)
+        tipo_automata = "AFD" if es_afd else "AFND"
+        
+        # 1. Validar estados básicos
+        if not automata.estados:
+            validacion["errores"].append("El autómata no tiene estados")
+            validacion["es_valido"] = False
+            return validacion
+        
+        # 2. Validar estado inicial
+        if automata.estado_inicial not in automata.estados:
+            validacion["errores"].append(f"El estado inicial '{automata.estado_inicial}' no está en el conjunto de estados")
+            validacion["es_valido"] = False
+        
+        # 3. Validar estados finales
+        estados_finales_invalidos = automata.estados_finales - automata.estados
+        if estados_finales_invalidos:
+            validacion["errores"].append(f"Los siguientes estados finales no existen: {estados_finales_invalidos}")
+            validacion["es_valido"] = False
+        
+        # 4. Validar alfabeto
+        if not automata.alfabeto:
+            validacion["advertencias"].append("El autómata no tiene símbolos en el alfabeto")
+        
+        # 5. Validar transiciones
+        transiciones_invalidas = []
+        estados_origen_en_transiciones = set()
+        estados_destino_en_transiciones = set()
+        
+        for clave_transicion, destinos in automata.transiciones.items():
+            if not isinstance(clave_transicion, tuple) or len(clave_transicion) != 2:
+                transiciones_invalidas.append(f"Formato inválido de clave de transición: {clave_transicion}")
+                continue
+                
+            estado_origen, simbolo = clave_transicion
+            
+            # Verificar estado origen
+            if estado_origen not in automata.estados:
+                transiciones_invalidas.append(f"Estado origen '{estado_origen}' no existe en la transición {clave_transicion}")
+            
+            # Verificar símbolo
+            if simbolo not in automata.alfabeto:
+                transiciones_invalidas.append(f"Símbolo '{simbolo}' no está en el alfabeto en la transición {clave_transicion}")
+            
+            # Verificar destinos
+            if es_afd:
+                # Para AFD, destino debe ser un solo estado
+                if not isinstance(destinos, str):
+                    transiciones_invalidas.append(f"AFD debe tener un solo estado destino en {clave_transicion}, encontrado: {destinos}")
+                elif destinos not in automata.estados:
+                    transiciones_invalidas.append(f"Estado destino '{destinos}' no existe en la transición {clave_transicion}")
+                else:
+                    estados_destino_en_transiciones.add(destinos)
+            else:
+                # Para AFND, destinos deben ser un conjunto
+                if not isinstance(destinos, set):
+                    transiciones_invalidas.append(f"AFND debe tener un conjunto de estados destino en {clave_transicion}, encontrado: {destinos}")
+                else:
+                    estados_invalidos = destinos - automata.estados
+                    if estados_invalidos:
+                        transiciones_invalidas.append(f"Estados destino inválidos en {clave_transicion}: {estados_invalidos}")
+                    estados_destino_en_transiciones.update(destinos)
+            
+            estados_origen_en_transiciones.add(estado_origen)
+        
+        if transiciones_invalidas:
+            validacion["errores"].extend(transiciones_invalidas)
+            validacion["es_valido"] = False
+        
+        # 6. Verificar completitud (solo para AFD)
+        if es_afd:
+            transiciones_faltantes = []
+            for estado in automata.estados:
+                for simbolo in automata.alfabeto:
+                    if (estado, simbolo) not in automata.transiciones:
+                        transiciones_faltantes.append(f"Transición faltante: ({estado}, {simbolo})")
+            
+            if transiciones_faltantes:
+                validacion["errores"].extend(transiciones_faltantes)
+                validacion["es_valido"] = False
+        
+        # 7. Verificar determinismo (para AFND)
+        elif not es_afd:
+            transiciones_no_deterministas = []
+            for clave_transicion, destinos in automata.transiciones.items():
+                if isinstance(destinos, set) and len(destinos) > 1:
+                    transiciones_no_deterministas.append(f"Transición no determinista: {clave_transicion} -> {destinos}")
+            
+            if transiciones_no_deterministas:
+                validacion["propiedades"]["es_deterministico"] = False
+                validacion["advertencias"].append("El AFND tiene transiciones no deterministas")
+            else:
+                validacion["propiedades"]["es_deterministico"] = True
+        
+        # 8. Verificar estados inalcanzables (advertencia)
+        estados_alcanzables = self._encontrar_estados_alcanzables(automata)
+        estados_inalcanzables = automata.estados - estados_alcanzables
+        
+        if estados_inalcanzables:
+            validacion["advertencias"].append(f"Estados inalcanzables: {estados_inalcanzables}")
+            validacion["propiedades"]["estados_inalcanzables"] = list(estados_inalcanzables)
+        
+        # 9. Propiedades adicionales
+        validacion["propiedades"].update({
+            "tipo": tipo_automata,
+            "num_estados": len(automata.estados),
+            "num_simbolos": len(automata.alfabeto),
+            "num_transiciones": len(automata.transiciones),
+            "num_estados_finales": len(automata.estados_finales),
+            "estados_alcanzables": len(estados_alcanzables),
+            "tiene_estados_finales": len(automata.estados_finales) > 0
+        })
         
         return validacion
+    
+    def _encontrar_estados_alcanzables(self, automata: Union[AFD, AFND]) -> set:
+        """
+        Encuentra todos los estados alcanzables desde el estado inicial
+        
+        Args:
+            automata: Autómata a analizar
+            
+        Returns:
+            Conjunto de estados alcanzables
+        """
+        from collections import deque
+        
+        alcanzables = set()
+        cola = deque([automata.estado_inicial])
+        alcanzables.add(automata.estado_inicial)
+        
+        while cola:
+            estado_actual = cola.popleft()
+            
+            # Explorar transiciones desde el estado actual
+            for simbolo in automata.alfabeto:
+                clave = (estado_actual, simbolo)
+                if clave in automata.transiciones:
+                    destinos = automata.transiciones[clave]
+                    
+                    if isinstance(destinos, str):
+                        # AFD
+                        destinos = {destinos}
+                    
+                    for destino in destinos:
+                        if destino not in alcanzables:
+                            alcanzables.add(destino)
+                            cola.append(destino)
+        
+        return alcanzables
     
     def obtener_estadisticas_automata(self, automata: Union[AFD, AFND]) -> Dict:
         """

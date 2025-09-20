@@ -199,6 +199,49 @@ class TestMinimizadorAFD(unittest.TestCase):
             resultado_minimizado = afd_minimizado.procesar_cadena(cadena)
             self.assertEqual(resultado_original, resultado_minimizado)
 
+    def test_validar_automata(self):
+        """
+        Test del método validar_automata
+        """
+        from src.automata import Automata
+        
+        automata_manager = Automata()
+        
+        # Test AFD válido
+        afd_valido = AFD(
+            estados={'q0', 'q1'},
+            alfabeto={'a', 'b'},
+            transiciones={
+                ('q0', 'a'): 'q1',
+                ('q0', 'b'): 'q0',
+                ('q1', 'a'): 'q1',
+                ('q1', 'b'): 'q0'
+            },
+            estado_inicial='q0',
+            estados_finales={'q1'}
+        )
+        
+        resultado = automata_manager.validar_automata(afd_valido)
+        self.assertTrue(resultado["es_valido"])
+        self.assertEqual(len(resultado["errores"]), 0)
+        self.assertEqual(resultado["propiedades"]["tipo"], "AFD")
+        
+        # Test AFD inválido (incompleto)
+        afd_invalido = AFD(
+            estados={'q0', 'q1'},
+            alfabeto={'a', 'b'},
+            transiciones={
+                ('q0', 'a'): 'q1'
+                # Faltan transiciones
+            },
+            estado_inicial='q0',
+            estados_finales={'q1'}
+        )
+        
+        resultado = automata_manager.validar_automata(afd_invalido)
+        self.assertFalse(resultado["es_valido"])
+        self.assertGreater(len(resultado["errores"]), 0)
+
 
 if __name__ == '__main__':
     unittest.main()
