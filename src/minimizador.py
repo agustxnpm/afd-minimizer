@@ -135,25 +135,18 @@ class MinimizadorAFD:
         while True:
             nuevas_particiones = []
             cambio = False
-            
             # Procesar cada partición actual
             for grupo in self.particiones:
                 if len(grupo) <= 1:
-                    # Grupos con 1 estado no se pueden dividir
                     nuevas_particiones.append(grupo)
                     continue
-                
-                # Dividir el grupo usando un diccionario de "firma" -> conjunto de estados
-                # La firma es una tupla de índices de partición para cada símbolo
                 firmas = {}
-                
                 for estado in grupo:
-                    # Calcular la firma: para cada símbolo, ¿a qué partición va?
                     firma = []
                     for simbolo in self.afd.alfabeto:
-                        if estado in self.afd.transiciones and simbolo in self.afd.transiciones[estado]:
-                            destino = self.afd.transiciones[estado][simbolo]
-                            # Encontrar en qué partición está el destino
+                        clave = (estado, simbolo)
+                        if clave in self.afd.transiciones:
+                            destino = self.afd.transiciones[clave]
                             indice_particion = None
                             for i, particion in enumerate(self.particiones):
                                 if destino in particion:
@@ -161,31 +154,18 @@ class MinimizadorAFD:
                                     break
                             firma.append(indice_particion)
                         else:
-                            # Si no hay transición, usar -1 como indicador especial
                             firma.append(-1)
-                    
-                    # Convertir firma a tupla (hashable)
                     firma_tupla = tuple(firma)
-                    
                     if firma_tupla not in firmas:
                         firmas[firma_tupla] = set()
                     firmas[firma_tupla].add(estado)
-                
-                # Agregar los nuevos subgrupos
                 for subgrupo in firmas.values():
                     nuevas_particiones.append(subgrupo)
-                
-                # Si se dividió el grupo (más de un subgrupo), marcar cambio
                 if len(firmas) > 1:
                     cambio = True
-            
-            # Si no hubo cambios, terminamos
             if not cambio:
                 break
-            
-            # Actualizar particiones para la siguiente iteración
             self.particiones = nuevas_particiones
-        
         return self.particiones
     
     def son_estados_equivalentes(self, estado1: str, estado2: str, particion: List[Set[str]]) -> bool:
@@ -215,34 +195,22 @@ class MinimizadorAFD:
         
         # Verificar que vayan a la misma partición para cada símbolo
         for simbolo in self.afd.alfabeto:
-            # Obtener destinos
-            destino1 = None
-            destino2 = None
-            
-            if estado1 in self.afd.transiciones and simbolo in self.afd.transiciones[estado1]:
-                destino1 = self.afd.transiciones[estado1][simbolo]
-            
-            if estado2 in self.afd.transiciones and simbolo in self.afd.transiciones[estado2]:
-                destino2 = self.afd.transiciones[estado2][simbolo]
-            
-            # Si uno tiene transición y el otro no, no son equivalentes
+            clave1 = (estado1, simbolo)
+            clave2 = (estado2, simbolo)
+            destino1 = self.afd.transiciones.get(clave1, None)
+            destino2 = self.afd.transiciones.get(clave2, None)
             if (destino1 is None) != (destino2 is None):
                 return False
-            
-            # Si ambos tienen transición, verificar que vayan a la misma partición
             if destino1 is not None and destino2 is not None:
                 particion_destino1 = None
                 particion_destino2 = None
-                
                 for i, grupo in enumerate(particion):
                     if destino1 in grupo:
                         particion_destino1 = i
                     if destino2 in grupo:
                         particion_destino2 = i
-                
                 if particion_destino1 != particion_destino2:
                     return False
-        
         return True
     
     def construir_afd_minimizado(self) -> AFD:
