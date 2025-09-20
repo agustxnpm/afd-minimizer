@@ -1,12 +1,19 @@
 """
 Clase principal para coordinar todas las operaciones del minimizador
 """
-from typing import Dict, Optional, Union, List
-from .afd import AFD
-from .afnd import AFND
-from .minimizador import MinimizadorAFD
-from .conversor import ConversorAFND
-from .manejador_archivos import ManejadorArchivos
+from typing import Dict, Union, List
+try:
+    from .afd import AFD
+    from .afnd import AFND
+    from .minimizador import MinimizadorAFD
+    from .conversor import ConversorAFND
+    from .manejador_archivos import ManejadorArchivos
+except ImportError:
+    from afd import AFD
+    from afnd import AFND
+    from minimizador import MinimizadorAFD
+    from conversor import ConversorAFND
+    from manejador_archivos import ManejadorArchivos
 
 
 class Automata:

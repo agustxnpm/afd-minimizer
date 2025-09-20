@@ -4,8 +4,12 @@ Clase para manejar la lectura y escritura de archivos JSON de autómatas
 import json
 import os
 from typing import Dict, Union, List
-from .afd import AFD
-from .afnd import AFND
+try:
+    from .afd import AFD
+    from .afnd import AFND
+except ImportError:
+    from afd import AFD
+    from afnd import AFND
 
 
 class ManejadorArchivos:

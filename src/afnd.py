@@ -223,7 +223,11 @@ class AFND:
             key = (trans["origen"], trans["simbolo"])
             if key not in transiciones:
                 transiciones[key] = set()
-            transiciones[key].add(trans["destino"])
+            destino = trans["destino"]
+            if isinstance(destino, list):
+                transiciones[key].update(destino)
+            else:
+                transiciones[key].add(destino)
         
         return cls(estados, alfabeto, transiciones, estado_inicial, estados_finales)
     

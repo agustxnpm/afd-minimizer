@@ -2,8 +2,12 @@
 Clase para convertir AFND a AFD
 """
 from typing import Dict, Set, List, Tuple
-from .afd import AFD
-from .afnd import AFND
+try:
+    from .afd import AFD
+    from .afnd import AFND
+except ImportError:
+    from afd import AFD
+    from afnd import AFND
 
 
 class ConversorAFND:
