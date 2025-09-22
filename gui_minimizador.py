@@ -9,6 +9,7 @@ from typing import Optional, Union, Dict, Any
 import pydot
 from PIL import Image, ImageTk
 import io
+import json
 
 import sys
 import os
@@ -28,7 +29,7 @@ class GUIMinimizador:
 
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("🤖 Minimizador de Autómatas - Teoría de la Computación")
+        self.root.title("🤖 Minimizador de Autómatas - Fundamentos Teóricos de Informática")
         self.root.geometry("1500x950")
         self.root.minsize(1200, 800)
         
@@ -42,14 +43,16 @@ class GUIMinimizador:
         self.automata_original: Optional[Union[AFD, AFND]] = None
         self.automata_afd: Optional[AFD] = None
         self.automata_minimizado: Optional[AFD] = None
+        self.afd_original_para_min: Optional[AFD] = None
+        self.lenguaje: str = "No especificado"
         self.imagen_original: Optional[ImageTk.PhotoImage] = None
         self.imagen_afd: Optional[ImageTk.PhotoImage] = None
         self.imagen_minimizado: Optional[ImageTk.PhotoImage] = None
 
         # Variables para almacenar imágenes originales (sin zoom)
-        self.imagen_original_raw: Optional[bytes] = None
-        self.imagen_afd_raw: Optional[bytes] = None
-        self.imagen_minimizado_raw: Optional[bytes] = None
+        self.imagen_original_pil: Optional[Image.Image] = None
+        self.imagen_afd_pil: Optional[Image.Image] = None
+        self.imagen_minimizado_pil: Optional[Image.Image] = None
 
         # Variables de zoom para cada panel
         self.zoom_original = 1.0
@@ -58,6 +61,12 @@ class GUIMinimizador:
         self.zoom_factor = 1.1  # Factor de zoom por cada paso
         self.zoom_min = 0.1     # Zoom mínimo
         self.zoom_max = 5.0     # Zoom máximo
+
+        # Variables de offset para pan/arrastre
+        self.offset_original = {'x': 0, 'y': 0}
+        self.offset_afd = {'x': 0, 'y': 0}
+        self.offset_minimizado = {'x': 0, 'y': 0}
+        self.drag_start = None  # Para drag-and-drop
 
         # Opción de operación
         self.operacion = tk.StringVar(value="afnd_afd")
@@ -105,6 +114,9 @@ class GUIMinimizador:
                                text="Convierte AFND a AFD y minimiza autómatas finitos determinísticos",
                                font=('Segoe UI', 10))
         descripcion.pack()
+        
+        self.label_lenguaje = ttk.Label(frame_titulo, text="", font=('Segoe UI', 20, 'italic'))
+        self.label_lenguaje.pack()
 
         # Frame para selector de operación con mejor diseño
         frame_operacion = ttk.LabelFrame(frame_superior, text="📋 Seleccionar Operación", padding="10")
@@ -216,6 +228,10 @@ class GUIMinimizador:
         self.canvas_original.bind("<Button-4>", lambda e: self._zoom_canvas(e, 'original', zoom_in=True))
         self.canvas_original.bind("<Button-5>", lambda e: self._zoom_canvas(e, 'original', zoom_in=False))
 
+        # Bindings para drag en panel original
+        self.canvas_original.bind("<ButtonPress-1>", lambda e: self._start_drag(e, 'original'))
+        self.canvas_original.bind("<B1-Motion>", lambda e: self._drag(e, 'original'))
+
         # Panel AFD Convertido
         self.frame_afd = ttk.LabelFrame(
             self.frame_graficos, 
@@ -238,6 +254,10 @@ class GUIMinimizador:
         self.canvas_afd.bind("<Button-4>", lambda e: self._zoom_canvas(e, 'afd', zoom_in=True))
         self.canvas_afd.bind("<Button-5>", lambda e: self._zoom_canvas(e, 'afd', zoom_in=False))
 
+        # Bindings para drag en panel AFD
+        self.canvas_afd.bind("<ButtonPress-1>", lambda e: self._start_drag(e, 'afd'))
+        self.canvas_afd.bind("<B1-Motion>", lambda e: self._drag(e, 'afd'))
+
         # Panel AFD Minimizado
         self.frame_minimizado = ttk.LabelFrame(
             self.frame_graficos, 
@@ -259,6 +279,10 @@ class GUIMinimizador:
         self.canvas_minimizado.bind("<MouseWheel>", lambda e: self._zoom_canvas(e, 'minimizado'))
         self.canvas_minimizado.bind("<Button-4>", lambda e: self._zoom_canvas(e, 'minimizado', zoom_in=True))
         self.canvas_minimizado.bind("<Button-5>", lambda e: self._zoom_canvas(e, 'minimizado', zoom_in=False))
+
+        # Bindings para drag en panel minimizado
+        self.canvas_minimizado.bind("<ButtonPress-1>", lambda e: self._start_drag(e, 'minimizado'))
+        self.canvas_minimizado.bind("<B1-Motion>", lambda e: self._drag(e, 'minimizado'))
 
         # ===== SECCIÓN INFERIOR: Consola de estado =====
         frame_consola = ttk.LabelFrame(main_container, text="📝 Consola de Estado", padding="5")
@@ -318,7 +342,12 @@ class GUIMinimizador:
             
             # Resetear zoom del panel original
             self.zoom_original = 1.0
-            self.imagen_original_raw = None
+            self.imagen_original_pil = None
+            
+            # Leer JSON para extraer campo Lenguaje
+            with open(archivo, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            self.lenguaje = data.get("Lenguaje", "No especificado")
             
             # Cargar autómata
             self.automata_original = self.automata_manager.cargar(archivo)
@@ -336,6 +365,7 @@ class GUIMinimizador:
                 self.btn_procesar.config(state=tk.NORMAL)
                 self.btn_probar.config(state=tk.NORMAL)
                 self._mostrar_estado("✅ Autómata listo para procesar\n", 'success')
+                self.label_lenguaje.config(text=f"Lenguaje: {self.lenguaje}")
             else:
                 self.btn_procesar.config(state=tk.DISABLED)
                 self.btn_probar.config(state=tk.DISABLED)
@@ -353,17 +383,25 @@ class GUIMinimizador:
         self.automata_original = None
         self.automata_afd = None
         self.automata_minimizado = None
+        self.lenguaje = "No especificado"
         self.label_resultado_prueba.config(text="")
+        self.label_lenguaje.config(text="")
         
         # Limpiar imágenes guardadas
-        self.imagen_original_raw = None
-        self.imagen_afd_raw = None
-        self.imagen_minimizado_raw = None
+        self.imagen_original_pil = None
+        self.imagen_afd_pil = None
+        self.imagen_minimizado_pil = None
         
         # Resetear zoom
         self.zoom_original = 1.0
         self.zoom_afd = 1.0
         self.zoom_minimizado = 1.0
+
+        # Resetear offsets
+        self.offset_original = {'x': 0, 'y': 0}
+        self.offset_afd = {'x': 0, 'y': 0}
+        self.offset_minimizado = {'x': 0, 'y': 0}
+        self.drag_start = None
 
     def _procesar_automata(self):
         """Procesar el autómata según la operación seleccionada"""
@@ -374,19 +412,30 @@ class GUIMinimizador:
             op = self.operacion.get()
             self._mostrar_estado(f"\n⚙️ Procesando operación: {'AFND → AFD' if op == 'afnd_afd' else 'AFD → AFD mínimo'}\n", 'info')
             
-            # Limpiar resultados previos
-            self.automata_afd = None
-            self.automata_minimizado = None
-            self._mostrar_placeholder(self.canvas_afd, "No hay conversión")
-            self._mostrar_placeholder(self.canvas_minimizado, "No hay minimización")
-            
-            # Limpiar imágenes guardadas de resultados
-            self.imagen_afd_raw = None
-            self.imagen_minimizado_raw = None
-            
-            # Resetear zoom de los paneles resultantes
-            self.zoom_afd = 1.0
-            self.zoom_minimizado = 1.0
+            if op == "afnd_afd":
+                # Limpiar resultados previos para conversión
+                self.automata_afd = None
+                self.automata_minimizado = None
+                self._mostrar_placeholder(self.canvas_afd, "No hay conversión")
+                self._mostrar_placeholder(self.canvas_minimizado, "No hay minimización")
+                
+                # Limpiar imágenes guardadas de resultados
+                self.imagen_afd_pil = None
+                self.imagen_minimizado_pil = None
+                
+                # Resetear zoom de los paneles resultantes
+                self.zoom_afd = 1.0
+                self.zoom_minimizado = 1.0
+            elif op == "afd_min":
+                # Limpiar solo minimización, mantener AFD convertido si existe
+                self.automata_minimizado = None
+                self._mostrar_placeholder(self.canvas_minimizado, "No hay minimización")
+                
+                # Limpiar imagen de minimización
+                self.imagen_minimizado_pil = None
+                
+                # Resetear zoom del panel minimizado
+                self.zoom_minimizado = 1.0
             
             if op == "afnd_afd":
                 if not isinstance(self.automata_original, AFND):
@@ -401,13 +450,19 @@ class GUIMinimizador:
                 self._mostrar_estadisticas_conversion()
                 
             elif op == "afd_min":
-                if not isinstance(self.automata_original, AFD):
-                    self._mostrar_estado("⚠️ El autómata cargado no es un AFD.\n", 'warning')
-                    messagebox.showwarning("Advertencia", "El autómata cargado no es un AFD")
+                # Seleccionar AFD a minimizar: convertido si existe, sino el original
+                afd_a_minimizar = self.automata_afd if self.automata_afd else self.automata_original
+                
+                if not isinstance(afd_a_minimizar, AFD):
+                    self._mostrar_estado("⚠️ No hay AFD disponible para minimizar.\n", 'warning')
+                    messagebox.showwarning("Advertencia", "No hay AFD disponible para minimizar")
                     return
                 
+                # Guardar el AFD original para estadísticas
+                self.afd_original_para_min = afd_a_minimizar
+                
                 # Minimización AFD
-                self.automata_minimizado = self.automata_manager.minimizar(self.automata_original)
+                self.automata_minimizado = self.automata_manager.minimizar(afd_a_minimizar)
                 self._generar_grafico_minimizado()
                 self._mostrar_estado("✅ Minimización de AFD completada exitosamente.\n", 'success')
                 self._mostrar_estadisticas_minimizacion()
@@ -431,8 +486,8 @@ class GUIMinimizador:
 
     def _mostrar_estadisticas_minimizacion(self):
         """Mostrar estadísticas de la minimización"""
-        if self.automata_original and self.automata_minimizado:
-            orig_estados = len(self.automata_original.estados)
+        if self.afd_original_para_min and self.automata_minimizado:
+            orig_estados = len(self.afd_original_para_min.estados)
             min_estados = len(self.automata_minimizado.estados)
             reduccion = orig_estados - min_estados
             porcentaje = (reduccion / orig_estados) * 100 if orig_estados > 0 else 0
@@ -477,6 +532,9 @@ class GUIMinimizador:
         if op == "afd_min" and not self.automata_minimizado:
             return
 
+        # Determinar el autómata procesado
+        automata_procesado = self.automata_original if op == "afnd_afd" else self.afd_original_para_min
+
         archivo = filedialog.asksaveasfilename(
             title="Guardar informe",
             defaultextension=".txt",
@@ -489,20 +547,21 @@ class GUIMinimizador:
         try:
             with open(archivo, 'w', encoding='utf-8') as f:
                 f.write("=" * 70 + "\n")
-                f.write("       INFORME DE OPERACIÓN DE AUTÓMATA FINITO\n")
+                f.write("     INFORME DE PROCESAMIENTO DE AUTÓMATA FINITO\n")
                 f.write("=" * 70 + "\n\n")
                 
                 # Información del autómata original
                 f.write("1. AUTÓMATA ORIGINAL\n")
                 f.write("-" * 40 + "\n")
-                f.write(f"   Tipo: {'AFND' if isinstance(self.automata_original, AFND) else 'AFD'}\n")
-                f.write(f"   Estados: {list(self.automata_original.estados)}\n")
-                f.write(f"   Alfabeto: {list(self.automata_original.alfabeto)}\n")
-                f.write(f"   Estado inicial: {self.automata_original.estado_inicial}\n")
-                f.write(f"   Estados finales: {list(self.automata_original.estados_finales)}\n\n")
+                f.write(f"   Tipo: {'AFND' if isinstance(automata_procesado, AFND) else 'AFD'}\n")
+                f.write(f"   Estados: {list(automata_procesado.estados)}\n")
+                f.write(f"   Alfabeto: {list(automata_procesado.alfabeto)}\n")
+                f.write(f"   Estado inicial: {automata_procesado.estado_inicial}\n")
+                f.write(f"   Estados finales: {list(automata_procesado.estados_finales)}\n")
+                f.write(f"   Lenguaje: {self.lenguaje}\n\n")
                 
                 # Validación
-                validacion = self.automata_manager.validar_automata(self.automata_original)
+                validacion = self.automata_manager.validar_automata(automata_procesado)
                 f.write("2. VALIDACIÓN DEL AUTÓMATA ORIGINAL\n")
                 f.write("-" * 40 + "\n")
                 f.write(f"   Estado: {'✓ Válido' if validacion['es_valido'] else '✗ Inválido'}\n")
@@ -522,7 +581,46 @@ class GUIMinimizador:
                 f.write("3. PROCESO REALIZADO\n")
                 f.write("-" * 40 + "\n")
                 
-                if op == "afnd_afd":
+                # Verificar si hay proceso completo (conversión + minimización)
+                if self.automata_minimizado and self.automata_afd:
+                    # Proceso completo: AFND → AFD → AFD mínimo
+                    f.write("   Operaciones realizadas:\n")
+                    f.write("   1. Conversión de AFND a AFD (Método: Construcción de subconjuntos)\n")
+                    f.write("   2. Minimización de AFD (Método: Algoritmo k-equivalente)\n\n")
+                    
+                    f.write("4. AUTÓMATA INTERMEDIO (AFD)\n")
+                    f.write("-" * 40 + "\n")
+                    f.write(f"   Estados: {list(self.automata_afd.estados)}\n")
+                    f.write(f"   Estado inicial: {self.automata_afd.estado_inicial}\n")
+                    f.write(f"   Estados finales: {list(self.automata_afd.estados_finales)}\n\n")
+                    
+                    f.write("5. AUTÓMATA RESULTANTE FINAL (AFD MÍNIMO)\n")
+                    f.write("-" * 40 + "\n")
+                    f.write(f"   Estados: {list(self.automata_minimizado.estados)}\n")
+                    f.write(f"   Estado inicial: {self.automata_minimizado.estado_inicial}\n")
+                    f.write(f"   Estados finales: {list(self.automata_minimizado.estados_finales)}\n\n")
+                    
+                    # Estadísticas
+                    f.write("6. ESTADÍSTICAS\n")
+                    f.write("-" * 40 + "\n")
+                    # Conversión
+                    afnd_est = len(self.automata_original.estados)
+                    afd_est = len(self.automata_afd.estados)
+                    f.write(f"   Conversión AFND → AFD:\n")
+                    f.write(f"     Estados AFND: {afnd_est}\n")
+                    f.write(f"     Estados AFD: {afd_est}\n")
+                    f.write(f"     Factor de expansión: {afd_est/afnd_est:.2f}x\n\n")
+                    # Minimización
+                    min_est = len(self.automata_minimizado.estados)
+                    red = afd_est - min_est
+                    porc = (red/afd_est)*100 if afd_est > 0 else 0
+                    f.write(f"   Minimización AFD → AFD mínimo:\n")
+                    f.write(f"     Estados AFD: {afd_est}\n")
+                    f.write(f"     Estados mínimos: {min_est}\n")
+                    f.write(f"     Estados eliminados: {red}\n")
+                    f.write(f"     Reducción: {porc:.1f}%\n")
+                    
+                elif op == "afnd_afd":
                     f.write("   Operación: Conversión de AFND a AFD\n")
                     f.write("   Método: Construcción de subconjuntos\n\n")
                     f.write("4. AUTÓMATA RESULTANTE (AFD)\n")
@@ -530,6 +628,15 @@ class GUIMinimizador:
                     f.write(f"   Estados: {list(self.automata_afd.estados)}\n")
                     f.write(f"   Estado inicial: {self.automata_afd.estado_inicial}\n")
                     f.write(f"   Estados finales: {list(self.automata_afd.estados_finales)}\n\n")
+                    
+                    # Estadísticas
+                    f.write("5. ESTADÍSTICAS\n")
+                    f.write("-" * 40 + "\n")
+                    orig_est = len(automata_procesado.estados)
+                    res_est = len(self.automata_afd.estados)
+                    f.write(f"   Estados originales: {orig_est}\n")
+                    f.write(f"   Estados resultantes: {res_est}\n")
+                    f.write(f"   Factor de expansión: {res_est/orig_est:.2f}x\n")
                     
                 elif op == "afd_min":
                     f.write("   Operación: Minimización de AFD\n")
@@ -539,18 +646,11 @@ class GUIMinimizador:
                     f.write(f"   Estados: {list(self.automata_minimizado.estados)}\n")
                     f.write(f"   Estado inicial: {self.automata_minimizado.estado_inicial}\n")
                     f.write(f"   Estados finales: {list(self.automata_minimizado.estados_finales)}\n\n")
-                
-                # Estadísticas
-                f.write("5. ESTADÍSTICAS\n")
-                f.write("-" * 40 + "\n")
-                if op == "afnd_afd":
-                    orig_est = len(self.automata_original.estados)
-                    res_est = len(self.automata_afd.estados)
-                    f.write(f"   Estados originales: {orig_est}\n")
-                    f.write(f"   Estados resultantes: {res_est}\n")
-                    f.write(f"   Factor de expansión: {res_est/orig_est:.2f}x\n")
-                else:
-                    orig_est = len(self.automata_original.estados)
+                    
+                    # Estadísticas
+                    f.write("5. ESTADÍSTICAS\n")
+                    f.write("-" * 40 + "\n")
+                    orig_est = len(automata_procesado.estados)
                     res_est = len(self.automata_minimizado.estados)
                     red = orig_est - res_est
                     porc = (red/orig_est)*100 if orig_est > 0 else 0
@@ -587,17 +687,23 @@ class GUIMinimizador:
             orig_acepta = self.automata_original.procesar_cadena(cadena if cadena != "ε" else "")
             resultado = f"Cadena '{cadena}': Original {'✓' if orig_acepta else '✗'}"
             
-            # Probar en resultado según operación
-            if op == "afnd_afd" and self.automata_afd:
+            resultados = [orig_acepta]
+            
+            # Probar en AFD si existe
+            if self.automata_afd:
                 afd_acepta = self.automata_afd.procesar_cadena(cadena if cadena != "ε" else "")
                 resultado += f" | AFD {'✓' if afd_acepta else '✗'}"
-                equivalente = orig_acepta == afd_acepta
-                resultado += f" | {'✓ Equivalentes' if equivalente else '✗ NO equivalentes'}"
-                
-            elif op == "afd_min" and self.automata_minimizado:
+                resultados.append(afd_acepta)
+            
+            # Probar en minimizado si existe
+            if self.automata_minimizado:
                 min_acepta = self.automata_minimizado.procesar_cadena(cadena if cadena != "ε" else "")
                 resultado += f" | Minimizado {'✓' if min_acepta else '✗'}"
-                equivalente = orig_acepta == min_acepta
+                resultados.append(min_acepta)
+            
+            # Verificar equivalencia entre todos
+            if len(resultados) > 1:
+                equivalente = all(r == resultados[0] for r in resultados)
                 resultado += f" | {'✓ Equivalentes' if equivalente else '✗ NO equivalentes'}"
             
             # Actualizar label de resultado
@@ -616,9 +722,9 @@ class GUIMinimizador:
             return
         try:
             # Generar imagen si no existe
-            if self.imagen_original_raw is None:
-                self.imagen_original_raw = self._crear_grafico_automata(self.automata_original)
-            self._mostrar_grafico_en_canvas(self.canvas_original, self.imagen_original_raw, self.zoom_original)
+            if self.imagen_original_pil is None:
+                self.imagen_original_pil = self._crear_grafico_automata(self.automata_original)
+            self._mostrar_grafico_en_canvas(self.canvas_original, self.imagen_original_pil, self.zoom_original, 'original')
         except Exception as e:
             self._mostrar_estado(f"❌ Error al generar gráfico original: {str(e)}\n", 'error')
             self._mostrar_placeholder(self.canvas_original, "Error al generar gráfico")
@@ -629,9 +735,9 @@ class GUIMinimizador:
             return
         try:
             # Generar imagen si no existe
-            if self.imagen_afd_raw is None:
-                self.imagen_afd_raw = self._crear_grafico_automata(self.automata_afd)
-            self._mostrar_grafico_en_canvas(self.canvas_afd, self.imagen_afd_raw, self.zoom_afd)
+            if self.imagen_afd_pil is None:
+                self.imagen_afd_pil = self._crear_grafico_automata(self.automata_afd)
+            self._mostrar_grafico_en_canvas(self.canvas_afd, self.imagen_afd_pil, self.zoom_afd, 'afd')
         except Exception as e:
             self._mostrar_estado(f"❌ Error al generar gráfico AFD: {str(e)}\n", 'error')
             self._mostrar_placeholder(self.canvas_afd, "Error al generar gráfico")
@@ -642,17 +748,16 @@ class GUIMinimizador:
             return
         try:
             # Generar imagen si no existe
-            if self.imagen_minimizado_raw is None:
-                self.imagen_minimizado_raw = self._crear_grafico_automata(self.automata_minimizado)
-            self._mostrar_grafico_en_canvas(self.canvas_minimizado, self.imagen_minimizado_raw, self.zoom_minimizado)
+            if self.imagen_minimizado_pil is None:
+                self.imagen_minimizado_pil = self._crear_grafico_automata(self.automata_minimizado)
+            self._mostrar_grafico_en_canvas(self.canvas_minimizado, self.imagen_minimizado_pil, self.zoom_minimizado, 'minimizado')
         except Exception as e:
             self._mostrar_estado(f"❌ Error al generar gráfico minimizado: {str(e)}\n", 'error')
             self._mostrar_placeholder(self.canvas_minimizado, "Error al generar gráfico")
 
-    def _mostrar_grafico_en_canvas(self, canvas, imagen_bytes, zoom=1.0):
+    def _mostrar_grafico_en_canvas(self, canvas, imagen_pil, zoom=1.0, panel='original'):
         """Mostrar un gráfico en un canvas con ajuste de tamaño y zoom"""
-        # Cargar imagen
-        imagen_pil = Image.open(io.BytesIO(imagen_bytes))
+        # La imagen ya es un objeto PIL Image
         
         # Obtener dimensiones del canvas y de la imagen
         canvas_width = 450
@@ -664,7 +769,7 @@ class GUIMinimizador:
         zoomed_height = int(img_height * zoom)
         
         # Calcular factor de escala para ajustar la imagen al canvas
-        scale_factor = min(canvas_width / zoomed_width, canvas_height / zoomed_height, 1.0)
+        scale_factor = 1.0  # Permitir zoom ilimitado, la imagen puede ser más grande que el canvas
         
         # Calcular dimensiones finales
         final_width = int(zoomed_width * scale_factor)
@@ -672,16 +777,17 @@ class GUIMinimizador:
         
         # Redimensionar la imagen siempre que haya zoom o el tamaño haya cambiado
         if zoom != 1.0 or final_width != img_width or final_height != img_height:
-            imagen_pil = imagen_pil.resize((final_width, final_height), Image.Resampling.LANCZOS)
-            print(f"Redimensionando: {img_width}x{img_height} -> {final_width}x{final_height} (zoom: {zoom})")
+            # Usar BICUBIC para mejor calidad en zoom
+            imagen_pil = imagen_pil.resize((final_width, final_height), Image.Resampling.BICUBIC)
         
         # Convertir a PhotoImage
         imagen_tk = ImageTk.PhotoImage(imagen_pil)
         
-        # Limpiar canvas y mostrar imagen centrada
+        # Limpiar canvas y mostrar imagen centrada con offset
         canvas.delete("all")
-        x = canvas_width // 2
-        y = canvas_height // 2
+        offset = getattr(self, f"offset_{panel}")
+        x = canvas_width // 2 + offset['x']
+        y = canvas_height // 2 + offset['y']
         canvas.create_image(x, y, image=imagen_tk, anchor='center')
         
         # Guardar referencia para evitar que sea recolectada por garbage collector
@@ -716,10 +822,8 @@ class GUIMinimizador:
         draw.text((250, 160), f"Estado inicial: {automata.estado_inicial}", fill='black')
         draw.text((250, 190), f"Estados finales: {list(automata.estados_finales)}", fill='black')
 
-        # Convertir a bytes
-        buffer = io.BytesIO()
-        img.save(buffer, format='PNG')
-        return buffer.getvalue()
+        # Devolver la imagen PIL directamente
+        return img
 
     def _zoom_canvas(self, event, panel, zoom_in=None):
         """Manejar el zoom con la rueda del ratón"""
@@ -740,20 +844,20 @@ class GUIMinimizador:
         if panel == 'original':
             zoom_var = 'zoom_original'
             canvas = self.canvas_original
-            imagen_raw = self.imagen_original_raw
+            imagen_pil = self.imagen_original_pil
         elif panel == 'afd':
             zoom_var = 'zoom_afd'
             canvas = self.canvas_afd
-            imagen_raw = self.imagen_afd_raw
+            imagen_pil = self.imagen_afd_pil
         elif panel == 'minimizado':
             zoom_var = 'zoom_minimizado'
             canvas = self.canvas_minimizado
-            imagen_raw = self.imagen_minimizado_raw
+            imagen_pil = self.imagen_minimizado_pil
         else:
             return
         
         # Solo hacer zoom si hay una imagen cargada
-        if not imagen_raw:
+        if not imagen_pil:
             print("No hay imagen cargada para hacer zoom")
             return
         
@@ -764,15 +868,40 @@ class GUIMinimizador:
         else:
             new_zoom = max(current_zoom / self.zoom_factor, self.zoom_min)
         
-        print(f"Zoom actual: {current_zoom}, Nuevo zoom: {new_zoom}")
         
         # Solo actualizar si cambió significativamente
         if abs(new_zoom - current_zoom) > 0.01:
+            # Calcular nuevo offset para mantener el punto bajo el cursor
+            canvas_width = 450
+            canvas_height = 400
+            canvas_center_x = canvas_width // 2
+            canvas_center_y = canvas_height // 2
+            
+            # Obtener posición del mouse relativa al canvas
+            mouse_x = event.x
+            mouse_y = event.y
+            
+            # Obtener offset actual
+            current_offset = getattr(self, f"offset_{panel}")
+            current_offset_x = current_offset['x']
+            current_offset_y = current_offset['y']
+            
+            # Calcular coordenadas del punto en la imagen que está bajo el cursor
+            # (relativo al centro de la imagen)
+            image_x = (mouse_x - canvas_center_x - current_offset_x) / current_zoom
+            image_y = (mouse_y - canvas_center_y - current_offset_y) / current_zoom
+            
+            # Calcular nuevo offset para que ese punto siga bajo el cursor después del zoom
+            new_offset_x = mouse_x - canvas_center_x - (image_x * new_zoom)
+            new_offset_y = mouse_y - canvas_center_y - (image_y * new_zoom)
+            
+            # Aplicar nuevo zoom y offset
             setattr(self, zoom_var, new_zoom)
+            setattr(self, f"offset_{panel}", {'x': new_offset_x, 'y': new_offset_y})
             
             # Aplicar zoom a la imagen guardada
             try:
-                self._mostrar_grafico_en_canvas(canvas, imagen_raw, new_zoom)
+                self._mostrar_grafico_en_canvas(canvas, imagen_pil, new_zoom, panel)
                 
             except Exception as e:
                 self._mostrar_estado(f"❌ Error al aplicar zoom: {str(e)}\n", 'error')
@@ -780,7 +909,32 @@ class GUIMinimizador:
         else:
             print("Cambio de zoom muy pequeño, ignorando")
 
-    def _crear_grafico_automata(self, automata: Union[AFD, AFND]) -> bytes:
+    def _start_drag(self, event, panel):
+        """Iniciar el arrastre de la imagen"""
+        self.drag_start = {
+            'x': event.x,
+            'y': event.y,
+            'offset': getattr(self, f"offset_{panel}").copy(),
+            'panel': panel
+        }
+
+    def _drag(self, event, panel):
+        """Manejar el arrastre de la imagen"""
+        if self.drag_start and self.drag_start['panel'] == panel:
+            dx = event.x - self.drag_start['x']
+            dy = event.y - self.drag_start['y']
+            offset = self.drag_start['offset']
+            new_offset = {'x': offset['x'] + dx, 'y': offset['y'] + dy}
+            setattr(self, f"offset_{panel}", new_offset)
+            
+            # Redibujar la imagen
+            imagen_pil = getattr(self, f"imagen_{panel}_pil")
+            if imagen_pil:
+                zoom = getattr(self, f"zoom_{panel}")
+                canvas = getattr(self, f"canvas_{panel}")
+                self._mostrar_grafico_en_canvas(canvas, imagen_pil, zoom, panel)
+
+    def _crear_grafico_automata(self, automata: Union[AFD, AFND]) -> Image.Image:
         """Crear gráfico de autómata usando pydot con mejor estilo"""
         try:
             # Verificar disponibilidad de graphviz
@@ -902,8 +1056,9 @@ class GUIMinimizador:
                 )
             grafo.add_edge(arista)
 
-        # Renderizar a PNG
-        return grafo.create_png()
+        # Renderizar a PNG y convertir a PIL Image
+        png_bytes = grafo.create_png()
+        return Image.open(io.BytesIO(png_bytes))
 
     def _mostrar_estado(self, mensaje: str, tipo='normal'):
         """Mostrar mensaje en el área de texto con formato"""
