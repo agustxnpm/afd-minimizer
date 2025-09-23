@@ -1,0 +1,17 @@
+{
+  "tipo": "AFND",
+  "estados": ["q0", "q1", "q2", "q3", "q4"],
+  "alfabeto": ["0", "1"],
+  "transiciones": [
+    { "origen": "q0", "simbolo": "0", "destino": "q0" },
+    { "origen": "q0", "simbolo": "1", "destino": "q0" },
+    { "origen": "q0", "simbolo": "0", "destino": "q1" },
+    { "origen": "q1", "simbolo": "1", "destino": "q4" },
+    { "origen": "q0", "simbolo": "0", "destino": "q2" },
+    { "origen": "q2", "simbolo": "0", "destino": "q3" },
+    { "origen": "q3", "simbolo": "1", "destino": "q4" }
+  ],
+  "estado_inicial": "q0",
+  "estados_finales": ["q4"],
+  "Lenguaje": "cadenas en {0,1} que terminan en 01"
+}
