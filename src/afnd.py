@@ -1,7 +1,7 @@
 """
 Clase para representar un Autómata Finito No Determinístico (AFND)
 """
-from typing import Dict, Set, Tuple, List, Optional
+from typing import Dict, Set, Tuple
 from collections import deque  # Importar deque para mejorar la eficiencia
 
 class AFND:

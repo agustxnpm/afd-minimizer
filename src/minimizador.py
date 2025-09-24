@@ -1,7 +1,7 @@
 """
 Clase para la minimización de Autómatas Finitos Determinísticos
 """
-from typing import Dict, Set, List, Tuple
+from typing import Dict, Set, List
 from collections import deque
 try:
     from .afd import AFD
