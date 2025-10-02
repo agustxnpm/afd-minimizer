@@ -199,9 +199,11 @@ class Automata:
             if estado_origen not in automata.estados:
                 transiciones_invalidas.append(f"Estado origen '{estado_origen}' no existe en la transición {clave_transicion}")
             
-            # Verificar símbolo
+            # Verificar símbolo - PERMITIR lambda para AFND
             if simbolo not in automata.alfabeto:
-                transiciones_invalidas.append(f"Símbolo '{simbolo}' no está en el alfabeto en la transición {clave_transicion}")
+                # Permitir 'lambda', 'λ' o '' solo en AFND
+                if not (not es_afd and simbolo in ['lambda', 'λ', '']):
+                    transiciones_invalidas.append(f"Símbolo '{simbolo}' no está en el alfabeto en la transición {clave_transicion}")
             
             # Verificar destinos
             if es_afd:
