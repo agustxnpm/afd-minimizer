@@ -30,8 +30,8 @@ class GUIMinimizador:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("🤖 Minimizador de Autómatas - Fundamentos Teóricos de Informática")
-        self.root.geometry("1500x950")
-        self.root.minsize(1200, 800)
+        self.root.geometry("1200x700")
+        self.root.minsize(1000, 700)
         
         # Configurar estilo
         self._configurar_estilo()
@@ -202,9 +202,8 @@ class GUIMinimizador:
         self.frame_graficos = ttk.Frame(main_container)
         self.frame_graficos.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
-        # Crear tres paneles de tamaño fijo para los gráficos
-        panel_width = 450
-        panel_height = 400
+        # Crear tres paneles adaptativos para los gráficos
+        # Los tamaños se ajustarán automáticamente
         
         # Panel Autómata Original
         self.frame_original = ttk.LabelFrame(
@@ -214,13 +213,13 @@ class GUIMinimizador:
         )
         self.canvas_original = tk.Canvas(
             self.frame_original, 
-            width=panel_width, 
-            height=panel_height,
             bg='white',
             relief=tk.SUNKEN,
-            borderwidth=2
+            borderwidth=2,
+            width=350,
+            height=200
         )
-        self.canvas_original.pack(padx=5, pady=5)
+        self.canvas_original.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self._mostrar_placeholder(self.canvas_original, "No hay autómata cargado")
         
         # Bindings para zoom en panel original
@@ -240,13 +239,13 @@ class GUIMinimizador:
         )
         self.canvas_afd = tk.Canvas(
             self.frame_afd, 
-            width=panel_width, 
-            height=panel_height,
             bg='white',
             relief=tk.SUNKEN,
-            borderwidth=2
+            borderwidth=2,
+            width=350,
+            height=200
         )
-        self.canvas_afd.pack(padx=5, pady=5)
+        self.canvas_afd.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self._mostrar_placeholder(self.canvas_afd, "No hay conversión")
         
         # Bindings para zoom en panel AFD
@@ -266,13 +265,13 @@ class GUIMinimizador:
         )
         self.canvas_minimizado = tk.Canvas(
             self.frame_minimizado, 
-            width=panel_width, 
-            height=panel_height,
             bg='white',
             relief=tk.SUNKEN,
-            borderwidth=2
+            borderwidth=2,
+            width=350,
+            height=200
         )
-        self.canvas_minimizado.pack(padx=5, pady=5)
+        self.canvas_minimizado.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self._mostrar_placeholder(self.canvas_minimizado, "No hay minimización")
         
         # Bindings para zoom en panel minimizado
@@ -291,7 +290,7 @@ class GUIMinimizador:
         # Área de texto con scrollbar
         self.texto_estado = scrolledtext.ScrolledText(
             frame_consola, 
-            height=8,
+            height=6,
             wrap=tk.WORD,
             font=('Consolas', 9),
             bg='#2c3e50',
@@ -308,10 +307,10 @@ class GUIMinimizador:
 
     def _configurar_layout(self):
         """Configurar el layout de los widgets"""
-        # Los paneles de gráficos en horizontal
-        self.frame_original.pack(side=tk.LEFT, fill=tk.BOTH, padx=5)
-        self.frame_afd.pack(side=tk.LEFT, fill=tk.BOTH, padx=5)
-        self.frame_minimizado.pack(side=tk.LEFT, fill=tk.BOTH, padx=5)
+        # Los paneles de gráficos en horizontal con expansión
+        self.frame_original.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+        self.frame_afd.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+        self.frame_minimizado.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
 
     def _mostrar_placeholder(self, canvas, texto):
         """Mostrar texto placeholder en un canvas"""
@@ -759,9 +758,10 @@ class GUIMinimizador:
         """Mostrar un gráfico en un canvas con ajuste de tamaño y zoom"""
         # La imagen ya es un objeto PIL Image
         
-        # Obtener dimensiones del canvas y de la imagen
-        canvas_width = 450
-        canvas_height = 400
+        # Obtener dimensiones actuales del canvas y de la imagen
+        canvas.update_idletasks()  # Asegurar que el canvas tenga sus dimensiones actualizadas
+        canvas_width = canvas.winfo_width() if canvas.winfo_width() > 1 else 350
+        canvas_height = canvas.winfo_height() if canvas.winfo_height() > 1 else 200
         img_width, img_height = imagen_pil.size
         
         # Aplicar zoom a las dimensiones originales
@@ -872,8 +872,9 @@ class GUIMinimizador:
         # Solo actualizar si cambió significativamente
         if abs(new_zoom - current_zoom) > 0.01:
             # Calcular nuevo offset para mantener el punto bajo el cursor
-            canvas_width = 450
-            canvas_height = 400
+            canvas.update_idletasks()
+            canvas_width = canvas.winfo_width() if canvas.winfo_width() > 1 else 350
+            canvas_height = canvas.winfo_height() if canvas.winfo_height() > 1 else 200
             canvas_center_x = canvas_width // 2
             canvas_center_y = canvas_height // 2
             
